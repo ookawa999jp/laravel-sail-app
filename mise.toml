@@ -1,0 +1,6 @@
+[env]
+_.path = ".tools/php-shim"
+
+PHP_DOCKER_SERVICE = "laravel.test"
+PHP_CONTAINER_ROOT = "/var/www/html"
+

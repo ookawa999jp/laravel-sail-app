@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# --- 1) Laravel 拡張の「PHP_BINARY」誤認を潰す ---
+# laravel.vscode-laravel は内部で `php -r "echo PHP_BINARY;"` を呼び、
+# 返ってきたパスを「ローカルPHPの実体」として後続に使うことがある。
+#
+# コンテナの php は /usr/local/bin/php になりやすいが、
+# ホスト側に /usr/local/bin/php が存在しないと拡張が死ぬ（not found）。
+#
+# ここで `PHP_BINARY` を要求されたときだけ「shim 自身のパス」を返して誤認を回避する。
+if [[ "${1:-}" == "-r" ]]; then
+  code="${2:-}"
+  if [[ "$code" == *PHP_BINARY* ]]; then
+    echo "$0"
+    exit 0
+  fi
+fi
+
+# --- 2) ホスト絶対パス → コンテナ内マウントパスに変換 ---
+# VS Code 拡張はホスト側の絶対パス（/myDocker/...）を引数に渡してくることがある。
+# それをコンテナ内のマウント先（/var/www/html/...）へ置換する。
+
+# ホスト側のプロジェクトルート（このshimは <root>/.tools/php-shim/php にある想定）
+HOST_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+
+# コンテナ内のプロジェクトルート（mise.toml の PHP_CONTAINER_ROOT で上書き可能）
+CONTAINER_ROOT="${PHP_CONTAINER_ROOT:-/var/www/html/laravelapp}"
+
+mapped=()
+for a in "$@"; do
+  if [[ "$a" == "$HOST_ROOT"* ]]; then
+    mapped+=("${CONTAINER_ROOT}${a#"$HOST_ROOT"}")
+  else
+    mapped+=("$a")
+  fi
+done
+
+# laravel sailのためコメントアウト
+#*** --- 3) 実体はコンテナの php を叩く ---
+#*** exec docker compose exec -T "${PHP_DOCKER_SERVICE:-app}" php "${mapped[@]}"
+# laravel sailのため
+cd "$HOST_ROOT"
+exec ./vendor/bin/sail php "${mapped[@]}"
+
+
